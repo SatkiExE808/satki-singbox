@@ -31,7 +31,11 @@ protocol_exists() {
 generate_config() {
     echo "Generating configuration file from $DB..."
     # Example: Just print the DB contents
-    cat "$DB"
+    if [ -f "$DB" ]; then
+        cat "$DB"
+    else
+        echo "No protocols found in database."
+    fi
     echo "Config generation complete."
 }
 
@@ -137,6 +141,23 @@ add_protocol() {
     fi
 }
 
+# Remove protocol from database
+remove_protocol() {
+    if [ ! -f "$DB" ] || [ ! -s "$DB" ]; then
+        echo "No protocols to remove."
+        return
+    fi
+    echo "Current protocols:"
+    nl -w2 -s'. ' "$DB"
+    read -p "Enter the number of the protocol to remove: " num
+    if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "$(wc -l < "$DB")" ]; then
+        sed -i "${num}d" "$DB"
+        echo "Protocol #$num removed."
+    else
+        echo "Invalid selection."
+    fi
+}
+
 # Main menu
 main_menu() {
     while true; do
@@ -144,14 +165,16 @@ main_menu() {
         echo "==== Satki Sing-box Protocol Manager ===="
         echo "1. Add protocol"
         echo "2. Show protocols"
-        echo "3. Generate config"
-        echo "4. Exit"
+        echo "3. Remove protocol"
+        echo "4. Generate config"
+        echo "5. Exit"
         read -p "> " choice
         case $choice in
             1) add_protocol ;;
-            2) cat "$DB" 2>/dev/null || echo "No protocols added yet." ;;
-            3) generate_config ;;
-            4) echo "Bye!"; exit 0 ;;
+            2) if [ -f "$DB" ] && [ -s "$DB" ]; then cat "$DB"; else echo "No protocols added yet."; fi ;;
+            3) remove_protocol ;;
+            4) generate_config ;;
+            5) echo "Bye!"; exit 0 ;;
             *) echo "Invalid option." ;;
         esac
     done
