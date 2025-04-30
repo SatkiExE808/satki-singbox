@@ -1,5 +1,6 @@
 ## 🚀 One-command install
 bash <(curl -fsSL https://raw.githubusercontent.com/SatkiExE808/satki-singbox/main/satki.sh)
+
 bash <(wget -qO- https://raw.githubusercontent.com/SatkiExE808/satki-singbox/main/satki.sh)
 ## ✨ Features
 One-command install and self-updating menu
