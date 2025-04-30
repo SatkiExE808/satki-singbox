@@ -11,12 +11,42 @@ if [[ "$0" != "/usr/local/bin/satki" ]]; then
     exit 0
 fi
 
+# Detect sing-box config path from systemd service
+detect_singbox_config_path() {
+    local service_file=""
+    if [[ -f /etc/systemd/system/sing-box.service ]]; then
+        service_file="/etc/systemd/system/sing-box.service"
+    elif [[ -f /lib/systemd/system/sing-box.service ]]; then
+        service_file="/lib/systemd/system/sing-box.service"
+    fi
+
+    if [[ -n "$service_file" ]]; then
+        local exec_line
+        exec_line=$(grep ExecStart "$service_file" | grep sing-box)
+        # Look for -c or -C argument
+        if [[ "$exec_line" =~ -c[[:space:]]*([^\ ]+) ]]; then
+            CONFIG_PATH="${BASH_REMATCH[1]}"
+            CONFIG_DIR=$(dirname "$CONFIG_PATH")
+        elif [[ "$exec_line" =~ -C[[:space:]]*([^\ ]+) ]]; then
+            CONFIG_DIR="${BASH_REMATCH[1]}"
+            CONFIG_PATH="$CONFIG_DIR/config.json"
+        else
+            # Default fallback
+            CONFIG_DIR="/usr/local/etc/sing-box"
+            CONFIG_PATH="$CONFIG_DIR/config.json"
+        fi
+    else
+        CONFIG_DIR="/usr/local/etc/sing-box"
+        CONFIG_PATH="$CONFIG_DIR/config.json"
+    fi
+    CERT_PATH="$CONFIG_DIR/singbox_cert.pem"
+    KEY_PATH="$CONFIG_DIR/singbox_key.pem"
+}
+
+detect_singbox_config_path
+
 SINGBOX_BIN="/usr/local/bin/sing-box"
 SERVICE_FILE="/etc/systemd/system/sing-box.service"
-CONFIG_DIR="/usr/local/etc/sing-box"
-CONFIG_PATH="$CONFIG_DIR/config.json"
-CERT_PATH="$CONFIG_DIR/singbox_cert.pem"
-KEY_PATH="$CONFIG_DIR/singbox_key.pem"
 
 # Color codes
 GREEN='\033[0;32m'
