@@ -9,7 +9,6 @@ if [[ "$0" != "/usr/local/bin/satki" ]]; then
     echo "Launching satki..."
     exec /usr/local/bin/satki
     exit 0
-    
 fi
 
 SINGBOX_BIN="/usr/local/bin/sing-box"
