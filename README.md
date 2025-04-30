@@ -14,26 +14,7 @@ List and remove configs easily
 Fix systemd service file (no more duplicate ExecStart errors)
 Works on Ubuntu/Debian VPS (root required for install)
 ## 🖥️ Menu Preview
-==== Satki Singbox Menu ====
-
---- Sing-box Service Management ---
- 1. Install sing-box         (Download and install sing-box binary)
- 2. Uninstall sing-box       (Remove sing-box and all configs)
- 3. Start sing-box           (Start the sing-box service)
- 4. Check sing-box status    (Show sing-box service status)
-
---- Add New Protocol ---
- 5. Add VLESS               (Auto-port, UUID, no TLS)
- 6. Add VMess               (Auto-port, UUID, no TLS)
- 7. Add Trojan              (Auto-port, password, TLS enabled)
- 8. Add Shadowsocks         (Auto-port, AES-256-GCM)
- 9. Add Hysteria2           (Auto-port, password, TLS enabled)
-
---- Config Management ---
-10. List all configs        (Show all created configs and links)
-11. Remove a config         (Delete a config by number)
-12. Exit
-13. Fix sing-box service file  (Remove duplicate ExecStart lines and restart)
+![satkibox](https://github.com/user-attachments/assets/26291971-062f-47ef-9077-c0a73bcf48c0)
 ## 📝 Usage
 Install with the one-command above.
 The menu will launch automatically.
