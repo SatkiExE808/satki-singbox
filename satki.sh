@@ -97,6 +97,29 @@ EOF
     echo "Systemd service written to $SERVICE_FILE"
 }
 
+# Function to fix the service file (remove duplicate ExecStart lines)
+fix_service_file() {
+    local service_file="/etc/systemd/system/sing-box.service"
+    if [[ ! -f "$service_file" ]]; then
+        echo "Service file not found: $service_file"
+        return 1
+    fi
+
+    # Extract all lines except ExecStart, then add only the last ExecStart line
+    local last_execstart
+    last_execstart=$(grep '^ExecStart=' "$service_file" | tail -n 1)
+    sudo awk '!/^ExecStart=/' "$service_file" | sudo tee /tmp/sing-box.service.fixed >/dev/null
+    echo "$last_execstart" | sudo tee -a /tmp/sing-box.service.fixed >/dev/null
+
+    # Overwrite the original file
+    sudo mv /tmp/sing-box.service.fixed "$service_file"
+    echo "Fixed $service_file: only one ExecStart= line remains."
+
+    sudo systemctl daemon-reload
+    sudo systemctl restart sing-box
+    sudo systemctl status sing-box
+}
+
 # Function to uninstall sing-box
 uninstall_singbox() {
     echo "Uninstalling sing-box..."
@@ -390,8 +413,10 @@ while true; do
 
     echo -e "${CYAN}12.${NC} Exit"
     echo
+    echo -e "${CYAN}13.${NC} Fix sing-box service file  ${CYAN}(Remove duplicate ExecStart lines and restart)"
+    echo
 
-    read -p "Select an option [1-12]: " choice
+    read -p "Select an option [1-13]: " choice
 
     case $choice in
         1)
@@ -450,6 +475,9 @@ while true; do
         12)
             echo "Goodbye!"
             exit 0
+            ;;
+        13)
+            fix_service_file
             ;;
         *)
             echo "Invalid option."
