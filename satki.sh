@@ -2,23 +2,14 @@
 
 # Self-install as /usr/local/bin/satki if not already running as that
 if [[ "$0" != "/usr/local/bin/satki" ]]; then
-    if [[ ! -f "$0" || "$0" == /dev/fd/* ]]; then
-        # Running from process substitution, download the script from GitHub
-        echo "Downloading script from GitHub for installation..."
-        curl -fsSL https://raw.githubusercontent.com/SatkiExE808/satki-singbox/main/satki.sh -o /tmp/satki.sh
-        sudo cp /tmp/satki.sh /usr/local/bin/satki
-        sudo chmod +x /usr/local/bin/satki
-        echo "Launching satki..."
-        exec /usr/local/bin/satki
-        exit 0
-    else
-        echo "Installing as /usr/local/bin/satki..."
-        sudo cp "$0" /usr/local/bin/satki
-        sudo chmod +x /usr/local/bin/satki
-        echo "Launching satki..."
-        exec /usr/local/bin/satki
-        exit 0
-    fi
+    echo "Installing as /usr/local/bin/satki..."
+    curl -fsSL https://raw.githubusercontent.com/SatkiExE808/satki-singbox/main/satki.sh -o /tmp/satki.sh
+    sudo cp /tmp/satki.sh /usr/local/bin/satki
+    sudo chmod +x /usr/local/bin/satki
+    echo "Launching satki..."
+    exec /usr/local/bin/satki
+    exit 0
+    
 fi
 
 SINGBOX_BIN="/usr/local/bin/sing-box"
