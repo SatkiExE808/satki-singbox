@@ -79,9 +79,8 @@ install_singbox() {
     rm -rf "$tmpdir"
     echo "sing-box installed at $SINGBOX_BIN"
 
-    # Create a basic systemd service if not exists
-    if [ ! -f "$SERVICE_FILE" ]; then
-        sudo bash -c "cat > $SERVICE_FILE" <<EOF
+    # Always overwrite the systemd service file to avoid duplicate ExecStart
+    sudo bash -c "cat > $SERVICE_FILE" <<EOF
 [Unit]
 Description=sing-box Service
 After=network.target
@@ -94,9 +93,8 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
-        sudo systemctl daemon-reload
-        echo "Systemd service created at $SERVICE_FILE"
-    fi
+    sudo systemctl daemon-reload
+    echo "Systemd service written to $SERVICE_FILE"
 }
 
 # Function to uninstall sing-box
