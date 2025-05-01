@@ -8,7 +8,8 @@ NC='\033[0m' # No Color
 
 CONFIG_DIR="/etc/sing-box"
 INBOUNDS_DIR="$CONFIG_DIR/inbounds"
-mkdir -p "$INBOUNDS_DIR"
+CLIENT_DIR="$CONFIG_DIR/clients"
+mkdir -p "$INBOUNDS_DIR" "$CLIENT_DIR"
 
 CERT_PATH=""
 KEY_PATH=""
@@ -61,6 +62,7 @@ check_status() {
 
 fix_service_file() {
     echo "Fixing sing-box service file..."
+    # Remove duplicate ExecStart lines, keep only the first
     sudo sed -i '/^ExecStart=/!b;n;d' /etc/systemd/system/sing-box.service
     sudo systemctl daemon-reload
     sudo systemctl restart sing-box
@@ -194,15 +196,164 @@ merge_configs() {
 }
 
 list_inbounds() {
-    echo "Listing all inbound configs:"
+    echo "Listing all connection links with client configs and QR codes:"
     local i=1
+    local ip
+    ip=$(curl -4s ifconfig.me)
+
+    mkdir -p "$CLIENT_DIR"
+
     if ! compgen -G "$INBOUNDS_DIR/*.json" > /dev/null; then
         echo "No inbound configs found."
         return
     fi
+
     for file in "$INBOUNDS_DIR"/*.json; do
-        echo -e "${YELLOW}$i)${NC} $(basename "$file")"
-        jq '.inbounds[0] | {type, listen_port, users}' "$file"
+        local type port id password method userinfo link client_file qr_file
+        type=$(jq -r '.inbounds[0].type' "$file")
+        port=$(jq -r '.inbounds[0].listen_port' "$file")
+
+        case "$type" in
+            vless)
+                id=$(jq -r '.inbounds[0].users[0].id' "$file")
+                link="vless://${id}@${ip}:${port}?type=ws&path=/vless#${type}_${port}"
+
+                client_file="$CLIENT_DIR/vless_${port}_client.json"
+                cat > "$client_file" <<EOF
+{
+  "outbounds": [{
+    "type": "vless",
+    "tag": "out-vless",
+    "server": "${ip}",
+    "server_port": ${port},
+    "uuid": "${id}",
+    "transport": {
+      "type": "ws",
+      "path": "/vless"
+    },
+    "tls": {
+      "enabled": false
+    }
+  }]
+}
+EOF
+                ;;
+            vmess)
+                id=$(jq -r '.inbounds[0].users[0].id' "$file")
+                link="vmess://${id}@${ip}:${port}#${type}_${port}"
+
+                client_file="$CLIENT_DIR/vmess_${port}_client.json"
+                cat > "$client_file" <<EOF
+{
+  "outbounds": [{
+    "type": "vmess",
+    "tag": "out-vmess",
+    "server": "${ip}",
+    "server_port": ${port},
+    "uuid": "${id}",
+    "tls": {
+      "enabled": false
+    }
+  }]
+}
+EOF
+                ;;
+            trojan|trojan-gfw)
+                password=$(jq -r '.inbounds[0].users[0].password' "$file")
+                link="trojan://${password}@${ip}:${port}#${type}_${port}"
+
+                client_file="$CLIENT_DIR/${type}_${port}_client.json"
+                cat > "$client_file" <<EOF
+{
+  "outbounds": [{
+    "type": "${type}",
+    "tag": "out-${type}",
+    "server": "${ip}",
+    "server_port": ${port},
+    "password": "${password}",
+    "tls": {
+      "enabled": true
+    }
+  }]
+}
+EOF
+                ;;
+            shadowsocks)
+                method=$(jq -r '.inbounds[0].method' "$file")
+                password=$(jq -r '.inbounds[0].password' "$file")
+                userinfo=$(echo -n "${method}:${password}" | base64 -w0)
+                link="ss://${userinfo}@${ip}:${port}#${type}_${port}"
+
+                client_file="$CLIENT_DIR/shadowsocks_${port}_client.json"
+                cat > "$client_file" <<EOF
+{
+  "outbounds": [{
+    "type": "shadowsocks",
+    "tag": "out-ss",
+    "server": "${ip}",
+    "server_port": ${port},
+    "method": "${method}",
+    "password": "${password}",
+    "udp": true
+  }]
+}
+EOF
+                ;;
+            hysteria2)
+                password=$(jq -r '.inbounds[0].users[0].password' "$file")
+                link="hy2://${password}@${ip}:${port}#${type}_${port}"
+
+                client_file="$CLIENT_DIR/hysteria2_${port}_client.json"
+                cat > "$client_file" <<EOF
+{
+  "outbounds": [{
+    "type": "hysteria2",
+    "tag": "out-hysteria2",
+    "server": "${ip}",
+    "server_port": ${port},
+    "password": "${password}",
+    "tls": {
+      "enabled": true
+    }
+  }]
+}
+EOF
+                ;;
+            socks)
+                link="socks5://${ip}:${port}#${type}_${port}"
+
+                client_file="$CLIENT_DIR/socks5_${port}_client.json"
+                cat > "$client_file" <<EOF
+{
+  "outbounds": [{
+    "type": "socks",
+    "tag": "out-socks5",
+    "server": "${ip}",
+    "server_port": ${port},
+    "udp": true
+  }]
+}
+EOF
+                ;;
+            *)
+                link="Unknown protocol in $file"
+                client_file=""
+                ;;
+        esac
+
+        echo -e "${YELLOW}$i)${NC} $link"
+
+        # Generate QR code if qrencode is installed and link is valid
+        if command -v qrencode &>/dev/null && [[ -n "$link" && "$link" != Unknown* ]]; then
+            qr_file="$CLIENT_DIR/${type}_${port}_qrcode.png"
+            qrencode -o "$qr_file" -t PNG "$link"
+            echo "    Client config: $client_file"
+            echo "    QR code saved to: $qr_file"
+        else
+            echo "    Client config: $client_file"
+            echo "    QR code generation skipped (qrencode not installed or invalid link)."
+        fi
+
         ((i++))
         echo
     done
@@ -472,7 +623,7 @@ while true; do
     echo
 
     echo -e "${YELLOW}--- Config Management ---${NC}"
-    echo -e "${CYAN}10.${NC} List all configs        ${CYAN}(Show all created configs and links)"
+    echo -e "${CYAN}10.${NC} List all configs        ${CYAN}(Show all created links, client configs, and QR codes)"
     echo -e "${CYAN}11.${NC} Remove a config         ${CYAN}(Delete a config by number)"
     echo
 
