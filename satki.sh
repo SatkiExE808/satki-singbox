@@ -54,6 +54,8 @@ After=network.target
 
 [Service]
 ExecStart=/usr/local/bin/sing-box run -c $CONFIG_DIR/config.json
+StandardOutput=journal
+StandardError=journal
 Restart=on-failure
 
 [Install]
@@ -140,6 +142,17 @@ allow_port() {
         echo "Port $port allowed through firewalld."
     else
         echo "No recognized firewall found. Please allow port $port manually."
+    fi
+}
+
+# Merge all inbound JSON files into one config.json with proper structure
+merge_configs() {
+    local merged_file="$CONFIG_DIR/config.json"
+    if compgen -G "$INBOUNDS_DIR/*.json" > /dev/null; then
+        # Extract all inbound objects and combine into one array
+        jq -s '[.[].inbounds[]]' "$INBOUNDS_DIR"/*.json | jq -n --argjson inbounds "$(cat -)" '{inbounds: $inbounds}' > "$merged_file"
+    else
+        echo '{"inbounds":[]}' > "$merged_file"
     fi
 }
 
@@ -234,18 +247,6 @@ add_inbound() {
     sudo systemctl restart sing-box
 }
 
-merge_configs() {
-    local merged_file="$CONFIG_DIR/config.json"
-    local inbounds_json
-
-    if compgen -G "$INBOUNDS_DIR/*.json" > /dev/null; then
-        inbounds_json=$(jq -s '[.[][]]' "$INBOUNDS_DIR"/*.json)
-        echo "{\"inbounds\":$inbounds_json}" > "$merged_file"
-    else
-        echo '{"inbounds":[]}' > "$merged_file"
-    fi
-}
-
 list_inbounds() {
     echo "Listing all connection links with client configs and QR codes:"
     local i=1
@@ -272,7 +273,8 @@ list_inbounds() {
         case "$type" in
             vless)
                 id=$(jq -r '.inbounds[0].users[0].id' "$file")
-                link="vless://${id}@${ip}:${port}?type=ws&path=/vless#${type}_${port}"
+                # URL-encode path /vless as %2Fvless and add security=none for no TLS
+                link="vless://${id}@${ip}:${port}?type=ws&security=none&path=%2Fvless#${type}_${port}"
 
                 client_file="$CLIENT_DIR/vless_${port}_client.json"
                 cat > "$client_file" <<EOF
@@ -337,7 +339,7 @@ EOF
             shadowsocks)
                 method=$(jq -r '.inbounds[0].method' "$file")
                 password=$(jq -r '.inbounds[0].password' "$file")
-                userinfo=$(echo -n "${method}:${password}" | base64 -w0)
+                userinfo=$(echo -n "${method}:${password}" | base64 | tr -d '\n')
                 link="ss://${userinfo}@${ip}:${port}#${type}_${port}"
 
                 client_file="$CLIENT_DIR/shadowsocks_${port}_client.json"
