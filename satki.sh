@@ -47,21 +47,85 @@ detect_singbox_config_path
 SINGBOX_BIN="/usr/local/bin/sing-box"
 SERVICE_FILE="/etc/systemd/system/sing-box.service"
 
-# Cloudflare Origin Cert paths
-CF_CERT_PATH="$CONFIG_DIR/cf_cert.pem"
-CF_KEY_PATH="$CONFIG_DIR/cf_key.pem"
-
 # Color codes
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# Ask for Let's Encrypt domain at startup
+USE_LETSENCRYPT="no"
+LE_DOMAIN=""
+LE_CERT_PATH=""
+LE_KEY_PATH=""
+
+read -p "Do you want to use your own domain for Let's Encrypt TLS? (y/n): " use_le
+if [[ "$use_le" =~ ^[Yy]$ ]]; then
+    USE_LETSENCRYPT="yes"
+    read -p "Enter your domain (e.g. example.com): " LE_DOMAIN
+    LE_CERT_PATH="/etc/letsencrypt/live/$LE_DOMAIN/fullchain.pem"
+    LE_KEY_PATH="/etc/letsencrypt/live/$LE_DOMAIN/privkey.pem"
+fi
+
+# Cloudflare Origin Cert paths
+CF_CERT_PATH="$CONFIG_DIR/cf_cert.pem"
+CF_KEY_PATH="$CONFIG_DIR/cf_key.pem"
+
 # Ensure jq is installed
 if ! command -v jq &>/dev/null; then
     echo "jq is required for this script. Installing..."
     sudo apt-get update && sudo apt-get install -y jq
 fi
+
+# Ensure certbot is installed if needed
+ensure_certbot() {
+    if ! command -v certbot &>/dev/null; then
+        echo "certbot is required for Let's Encrypt. Installing..."
+        sudo apt-get update && sudo apt-get install -y certbot
+    fi
+}
+
+# Try to obtain Let's Encrypt certificate if not present
+obtain_letsencrypt_cert() {
+    ensure_certbot
+    echo "Attempting to obtain Let's Encrypt certificate for $LE_DOMAIN ..."
+    # Stop sing-box if running, to free up port 80
+    sudo systemctl stop sing-box 2>/dev/null
+    sudo certbot certonly --standalone --non-interactive --agree-tos --register-unsafely-without-email -d "$LE_DOMAIN"
+    # Restart sing-box after certbot
+    sudo systemctl start sing-box 2>/dev/null
+}
+
+# Function to generate a self-signed certificate if not exists, or use Let's Encrypt/Cloudflare Origin Cert if present
+ensure_cert() {
+    if [[ "$USE_LETSENCRYPT" == "yes" && -n "$LE_DOMAIN" ]]; then
+        if [[ ! -f "$LE_CERT_PATH" || ! -f "$LE_KEY_PATH" ]]; then
+            obtain_letsencrypt_cert
+        fi
+        if [[ -f "$LE_CERT_PATH" && -f "$LE_KEY_PATH" ]]; then
+            CERT_PATH="$LE_CERT_PATH"
+            KEY_PATH="$LE_KEY_PATH"
+            echo "Using Let's Encrypt certificate for TLS."
+            return
+        else
+            echo "Let's Encrypt certificate not found or failed to obtain. Falling back to other options."
+        fi
+    fi
+    if [[ -f "$CF_CERT_PATH" && -f "$CF_KEY_PATH" ]]; then
+        CERT_PATH="$CF_CERT_PATH"
+        KEY_PATH="$CF_KEY_PATH"
+        echo "Using Cloudflare Origin Certificate for TLS."
+    else
+        CERT_PATH="$CONFIG_DIR/singbox_cert.pem"
+        KEY_PATH="$CONFIG_DIR/singbox_key.pem"
+        if [ ! -f "$CERT_PATH" ] || [ ! -f "$KEY_PATH" ]; then
+            echo "Generating self-signed certificate for TLS protocols..."
+            sudo openssl req -x509 -newkey rsa:2048 -days 365 -nodes \
+                -keyout "$KEY_PATH" -out "$CERT_PATH" \
+                -subj "/CN=localhost"
+        fi
+    fi
+}
 
 # Function to install sing-box
 install_singbox() {
@@ -186,24 +250,6 @@ get_next_port() {
     done
     echo "No available ports in range $start_port-$end_port!" >&2
     exit 1
-}
-
-# Function to generate a self-signed certificate if not exists, or use Cloudflare Origin Cert if present
-ensure_cert() {
-    if [[ -f "$CF_CERT_PATH" && -f "$CF_KEY_PATH" ]]; then
-        CERT_PATH="$CF_CERT_PATH"
-        KEY_PATH="$CF_KEY_PATH"
-        echo "Using Cloudflare Origin Certificate for TLS."
-    else
-        CERT_PATH="$CONFIG_DIR/singbox_cert.pem"
-        KEY_PATH="$CONFIG_DIR/singbox_key.pem"
-        if [ ! -f "$CERT_PATH" ] || [ ! -f "$KEY_PATH" ]; then
-            echo "Generating self-signed certificate for TLS protocols..."
-            sudo openssl req -x509 -newkey rsa:2048 -days 365 -nodes \
-                -keyout "$KEY_PATH" -out "$CERT_PATH" \
-                -subj "/CN=localhost"
-        fi
-    fi
 }
 
 # Function to add inbound to config.json
