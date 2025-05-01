@@ -67,6 +67,30 @@ EOF
     fi
 }
 
+update_singbox() {
+    echo "Updating sing-box to the latest version..."
+
+    tmp_zip="/tmp/sing-box-latest.zip"
+    curl -L -o "$tmp_zip" "https://github.com/SagerNet/sing-box/releases/latest/download/sing-box-linux-amd64.zip"
+    if [[ $? -ne 0 ]]; then
+        echo "Failed to download latest sing-box release."
+        return 1
+    fi
+
+    if [[ -f /usr/local/bin/sing-box ]]; then
+        sudo cp /usr/local/bin/sing-box /usr/local/bin/sing-box.bak.$(date +%F-%T)
+    fi
+
+    sudo unzip -o "$tmp_zip" -d /usr/local/bin/
+    sudo chmod +x /usr/local/bin/sing-box
+
+    rm -f "$tmp_zip"
+
+    sudo systemctl restart sing-box
+
+    echo "sing-box updated and service restarted."
+}
+
 uninstall_singbox() {
     echo "Uninstalling sing-box..."
     sudo systemctl stop sing-box
@@ -641,6 +665,7 @@ while true; do
     echo -e "${CYAN} 2.${NC} Uninstall sing-box       ${CYAN}(Remove sing-box and all configs)"
     echo -e "${CYAN} 3.${NC} Start sing-box           ${CYAN}(Start the sing-box service)"
     echo -e "${CYAN} 4.${NC} Check sing-box status    ${CYAN}(Show sing-box service status)"
+    echo -e "${CYAN}16.${NC} Update sing-box          ${CYAN}(Download and install latest sing-box release)"
     echo
 
     echo -e "${YELLOW}--- Add New Protocol ---${NC}"
@@ -663,7 +688,7 @@ while true; do
     echo -e "${CYAN}13.${NC} Fix sing-box service file  ${CYAN}(Remove duplicate ExecStart lines and restart)"
     echo
 
-    read -p "Select an option [1-15]: " choice
+    read -p "Select an option [1-16]: " choice
 
     case $choice in
         1)
@@ -723,6 +748,9 @@ while true; do
             ;;
         15)
             add_socks5
+            ;;
+        16)
+            update_singbox
             ;;
         *)
             echo "Invalid option."
