@@ -14,6 +14,33 @@ mkdir -p "$INBOUNDS_DIR" "$CLIENT_DIR"
 CERT_PATH=""
 KEY_PATH=""
 
+install_qrencode() {
+    if ! command -v qrencode &>/dev/null; then
+        echo "qrencode not found. Installing..."
+        if command -v apt &>/dev/null; then
+            sudo apt update && sudo apt install -y qrencode
+        elif command -v yum &>/dev/null; then
+            sudo yum install -y qrencode
+        elif command -v dnf &>/dev/null; then
+            sudo dnf install -y qrencode
+        else
+            echo "Unsupported package manager. Please install qrencode manually."
+            return 1
+        fi
+
+        if command -v qrencode &>/dev/null; then
+            echo "qrencode installed successfully."
+            return 0
+        else
+            echo "Failed to install qrencode."
+            return 1
+        fi
+    else
+        echo "qrencode is already installed."
+        return 0
+    fi
+}
+
 install_singbox() {
     echo "Installing sing-box..."
     if ! command -v sing-box &>/dev/null; then
@@ -202,6 +229,9 @@ list_inbounds() {
     ip=$(curl -4s ifconfig.me)
 
     mkdir -p "$CLIENT_DIR"
+
+    # Ensure qrencode is installed before generating QR codes
+    install_qrencode || echo "Warning: QR code generation skipped due to qrencode install failure."
 
     if ! compgen -G "$INBOUNDS_DIR/*.json" > /dev/null; then
         echo "No inbound configs found."
