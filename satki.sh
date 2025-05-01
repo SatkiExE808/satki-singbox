@@ -39,14 +39,17 @@ detect_singbox_config_path() {
         CONFIG_DIR="/usr/local/etc/sing-box"
         CONFIG_PATH="$CONFIG_DIR/config.json"
     fi
-    CERT_PATH="$CONFIG_DIR/singbox_cert.pem"
-    KEY_PATH="$CONFIG_DIR/singbox_key.pem"
+    # CERT_PATH and KEY_PATH will be set dynamically in ensure_cert
 }
 
 detect_singbox_config_path
 
 SINGBOX_BIN="/usr/local/bin/sing-box"
 SERVICE_FILE="/etc/systemd/system/sing-box.service"
+
+# Cloudflare Origin Cert paths
+CF_CERT_PATH="$CONFIG_DIR/cf_cert.pem"
+CF_KEY_PATH="$CONFIG_DIR/cf_key.pem"
 
 # Color codes
 GREEN='\033[0;32m'
@@ -185,13 +188,21 @@ get_next_port() {
     exit 1
 }
 
-# Function to generate a self-signed certificate if not exists
+# Function to generate a self-signed certificate if not exists, or use Cloudflare Origin Cert if present
 ensure_cert() {
-    if [ ! -f "$CERT_PATH" ] || [ ! -f "$KEY_PATH" ]; then
-        echo "Generating self-signed certificate for TLS protocols..."
-        sudo openssl req -x509 -newkey rsa:2048 -days 365 -nodes \
-            -keyout "$KEY_PATH" -out "$CERT_PATH" \
-            -subj "/CN=localhost"
+    if [[ -f "$CF_CERT_PATH" && -f "$CF_KEY_PATH" ]]; then
+        CERT_PATH="$CF_CERT_PATH"
+        KEY_PATH="$CF_KEY_PATH"
+        echo "Using Cloudflare Origin Certificate for TLS."
+    else
+        CERT_PATH="$CONFIG_DIR/singbox_cert.pem"
+        KEY_PATH="$CONFIG_DIR/singbox_key.pem"
+        if [ ! -f "$CERT_PATH" ] || [ ! -f "$KEY_PATH" ]; then
+            echo "Generating self-signed certificate for TLS protocols..."
+            sudo openssl req -x509 -newkey rsa:2048 -days 365 -nodes \
+                -keyout "$KEY_PATH" -out "$CERT_PATH" \
+                -subj "/CN=localhost"
+        fi
     fi
 }
 
